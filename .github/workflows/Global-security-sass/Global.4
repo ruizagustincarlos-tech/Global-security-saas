@@ -1,0 +1,195 @@
+GLOBAL-security-saas/
+│
+├── core/
+│   ├── scanner.py
+│   ├── rules.py
+│   ├── reporter.py
+│   └── utils.py
+│
+├── cli/
+│   └── main.py
+│
+├── config/
+│   └── rules.yaml
+│
+├── scripts/
+│   └── precommit.sh
+│
+├── reports/
+│   └── .gitkeep
+│
+├── .github/
+│   └── workflows/
+│       └── security-scan.yml
+│
+├── requirements.txt
+├── setup.sh
+└── README.md
+
+RULES = [
+    {
+        "name": "SQL Injection",
+        "pattern": r"(SELECT|INSERT|UPDATE|DELETE).*\+.*",
+        "severity": "CRITICAL",
+        "desc": "Evita concatenar queries. Usa prepared statements."
+    },
+    {
+        "name": "XSS",
+        "pattern": r"(innerHTML\s*=|document\.write\()",
+        "severity": "CRITICAL",
+        "desc": "Salida no sanitizada en el DOM."
+    },
+    {
+        "name": "Eval usage",
+        "pattern": r"\beval\(",
+        "severity": "HIGH",
+        "desc": "Ejecución dinámica peligrosa."
+    },
+    {
+        "name": "Command execution",
+        "pattern": r"(os\.system|subprocess|exec\()",
+        "severity": "HIGH",
+        "desc": "Ejecución de comandos del sistema."
+    },
+]
+import os
+import re
+from core.rules import RULES
+
+def scan_file(filepath):
+    findings = []
+
+    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+        for i, line in enumerate(f, 1):
+            for rule in RULES:
+                if re.search(rule["pattern"], line, re.IGNORECASE):
+                    findings.append({
+                        "file": filepath,
+                        "line": i,
+                        "rule": rule["name"],
+                        "severity": rule["severity"],
+                        "code": line.strip(),
+                        "desc": rule["desc"]
+                    })
+
+    return findings
+
+
+def scan_project(path):
+    results = []
+
+    for root, _, files in os.walk(path):
+        for file in files:
+            if file.endswith((".py", ".js", ".php")):
+                results.extend(scan_file(os.path.join(root, file)))
+
+    return results
+import json
+from datetime import datetime
+
+def print_console(findings):
+    if not findings:
+        print("✔ Sin problemas detectados")
+        return
+
+    for f in findings:
+        print(f"[{f['severity']}] {f['rule']}")
+        print(f"{f['file']}:{f['line']}")
+        print(f"→ {f['code']}")
+        print("-" * 40)
+
+def export_json(findings):
+    filename = f"reports/report_{datetime.now().timestamp()}.json"
+    with open(filename, "w") as f:
+        json.dump(findings, f, indent=4)
+    print(f"Reporte guardado en {filename}")
+import argparse
+from core.scanner import scan_project
+from core.reporter import print_console, export_json
+
+def main():
+    parser = argparse.ArgumentParser(description="GLOBAL Security Scanner")
+    parser.add_argument("path", help="Ruta del proyecto")
+    parser.add_argument("--json", action="store_true", help="Exportar JSON")
+
+    args = parser.parse_args()
+
+    findings = scan_project(args.path)
+    print_console(findings)
+
+    if args.json:
+        export_json(findings)
+
+    # Falla CI si hay críticos
+    for f in findings:
+        if f["severity"] == "CRITICAL":
+            exit(1)
+
+if __name__ == "__main__":
+    main()
+#!/data/data/com.termux/files/usr/bin/bash
+
+echo "🔍 Ejecutando scanner de seguridad..."
+
+python cli/main.py . 
+
+if [ $? -ne 0 ]; then
+    echo "❌ Commit bloqueado por vulnerabilidades críticas"
+    exit 1
+fi
+
+echo "✔ Seguridad OK"
+chmod +x scripts/precommit.sh
+ln -s ../../scripts/precommit.sh .git/hooks/pre-commit
+name: Security Scan
+
+on: [push, pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+
+    - name: Install deps
+      run: pip install -r requirements.txt
+
+    - name: Run scanner
+      run: python cli/main.py . --json
+pkg update -y
+pkg install python git -y
+
+pip install --upgrade pip
+
+echo "✔ Entorno listo"
+# GLOBAL Security SaaS
+
+Scanner de seguridad para detectar malas prácticas en código.
+
+## Uso
+
+python cli/main.py .
+
+## Opciones
+
+--json   Exporta reporte
+
+## Integración
+
+- Hook pre-commit
+- GitHub Actions
+pkg update
+pkg install git python -y
+
+git clone https://github.com/TU_USUARIO/GLOBAL-security-saas.git
+cd GLOBAL-security-saas
+
+bash setup.sh
+
+python cli/main.py .
